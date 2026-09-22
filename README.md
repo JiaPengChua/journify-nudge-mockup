@@ -1,100 +1,38 @@
-# Journify · custom chat window + self-hosted proactive nudge
+# Journify · proactive nudge → Ada
 
-A single-file mockup based on [shop.myjournify.com/support/contact-us](https://shop.myjournify.com/support/contact-us)
-— stripped back to the page shell (real logo and banner, header, footer) so nothing competes
-with the thing being demonstrated. It shows the pattern Journify asked for:
+A one-page mockup based on
+[shop.myjournify.com/support/contact-us](https://shop.myjournify.com/support/contact-us),
+stripped to the page shell so nothing competes with the thing being shown:
 
-1. The **page** owns the chat window, so it can be any size it likes.
-2. The **page** owns the proactive nudge bubble — it appears after the visitor has dwelled
-   on the page for N seconds.
-3. Accepting the nudge sets the meta field **`triggerNudge = true`** and opens the bot.
+1. Journify renders **its own nudge bubble** after the visitor has been on the page a while.
+2. Clicking it sets the meta field **`triggerNudge = true`**.
+3. Then it opens the bot.
 
 Live: **https://jiapengchua.github.io/journify-nudge-mockup/**
 Bot: `journify-sandbox`
 
----
-
-## The flow
-
-```
-page load          window.adaSettings = { lazy: true }     ← nothing loads, no chatter created
-   │
-   ├─ dwell timer (paused while the tab is hidden)
-   │
-   ▼
-N seconds          Journify's own bubble appears           ← still no Ada call
-   │
-   ├── dismissed ──► Ada is never loaded at all
-   │
-   ▼ accepted
-                   triggerNudge = true
-                   adaEmbed.start({ handle, parentElement, metaFields })
-                   dock opens
-```
-
-The dock is revealed **before** `start()` resolves, so the visitor gets instant feedback and
-watches the bot boot inside the window rather than clicking into nothing.
-
-## Two things Ada never does here
-
-**The bubble is not an Ada campaign.** It is ordinary page markup on a `setInterval` —
-a plain speech bubble in the Ada house style, click anywhere to open, small × to dismiss.
-That is the point — Journify controls the copy, the timing, the trigger conditions and the
-styling, and no Ada session exists until someone clicks. A dismissed nudge costs nothing.
-
-**The window size is not an Ada setting.** `parentElement` mounts the chat iframe inside
-`#jf-chat-mount`, and the iframe fills whatever box the page gives it. The S / M / L buttons
-in the dock header change two CSS variables — that is the entire resize mechanism.
-
-```css
-.jf-dock { width: var(--dock-w); height: var(--dock-h); }
-#jf-chat-mount iframe { width: 100% !important; height: 100% !important; }
-```
-
-## Why `triggerNudge` goes into `start()`, not `setMetaFields()`
-
-On a cold start the conversation is created **by** `start()`. A `setMetaFields()` call fired
-immediately afterwards can land after the greeting has already been generated, so a playbook
-branching on `triggerNudge` would miss it on the very turn it matters.
-
-So the page passes the flag into `start()` when the bot is not yet running, and only falls
-back to `setMetaFields()` when the bot is already up:
+## The whole integration
 
 ```js
-if (!adaStarted) {
-  adaEmbed.start({ handle, parentElement: 'jf-chat-mount',
-                   metaFields: { triggerNudge: true } });
-} else {
-  adaEmbed.setMetaFields({ triggerNudge: true });
-}
+window.adaSettings = { handle: "journify-sandbox" };
+
+// 1. nudge after the visitor has been on the page a while
+setTimeout(function () { nudge.classList.add("show"); }, DWELL_MS);
+
+// 2. accepted -> set the meta field, then open the bot
+nudge.onclick = function () {
+  nudge.classList.remove("show");
+  window.adaEmbed.setMetaFields({ triggerNudge: true })
+    .then(function () { window.adaEmbed.toggle(); });
+};
 ```
 
-## `toggle()` and `parentElement` are mutually exclusive
+That is all of it. The bubble is ordinary page markup on a `setTimeout` — Ada knows nothing
+about it, so Journify owns the copy, the timing and the trigger conditions. Dismissing it
+does nothing at all.
 
-Per the [SDK reference](https://docs.ada.cx/chat/web/sdk-api-reference#toggle):
-*"You cannot use this method with the `parentElement` option."*
-
-There is no drawer to toggle — the chat is inline in our own element — so the page opens and
-closes its own container with a CSS class. The conversation stays alive while the dock is
-closed; only `reset()` or `stop()` tear it down.
-
-The **Ada drawer** option in the demo panel switches to the stock drawer and drives it with
-`toggle()` instead, so you can compare the two side by side. The size presets do nothing in
-that mode, which is exactly the limitation that motivated the custom dock.
-
-## Demo controls
-
-Bottom-left **⚙ Demo controls** (delete the `jf-dev` block for production):
-
-| Control | What it does |
-| --- | --- |
-| Widget mode | Custom dock (`parentElement`) vs Ada drawer (`toggle()`) |
-| Dwell before nudge | Seconds of *visible* time before the bubble fires. Demo default 20s; real sites use 120–300s |
-| Meta fields | Live readout of what has been sent to Ada |
-| SDK call log | Every `adaEmbed.*` call and its result, timestamped |
-| Show nudge now / Restart timer | Skip or restart the wait |
-| Reset conversation | `reset({ metaFields: { triggerNudge: false } })` — new chatter |
-| Stop & unload | `stop()` — removes Embed2 entirely, back to a clean page |
+`toggle()` opens Ada's standard chat window, and Ada's standard chat button is on the page
+from the start, so a visitor who wants chat before the nudge fires can still get it.
 
 ## Wiring the Ada side
 
@@ -102,10 +40,10 @@ The page only *sends* the flag. To make the agent behave differently on a nudge-
 chat, create a variable named exactly `triggerNudge` on `journify-sandbox` — meta fields
 populate the matching variable — and branch on it. A nudged visitor did not come looking for
 chat; the page interrupted them. That earns a different opening from someone who clicked the
-launcher themselves.
+chat button themselves.
 
-Without that, `triggerNudge` is still recorded and visible in the **Meta variables** panel on
-each conversation, which is enough to measure nudge-attributed chats.
+Either way the flag is recorded and visible in the **Meta variables** panel on each
+conversation, which is enough to measure nudge-attributed chats.
 
 ## Before it will run
 
@@ -113,26 +51,33 @@ each conversation, which is enough to measure nudge-attributed chats.
 chat iframe. Add `https://jiapengchua.github.io` under Settings → Security on
 `journify-sandbox`, **with no trailing slash** (a trailing `/` silently kills the frame).
 
-If the chat does not come up within 12s the dock says so and names the origin to allow-list,
-rather than spinning forever.
+`file://` will not work. Serve over HTTPS, or `python3 -m http.server` locally — localhost
+has to be allow-listed too.
 
-`file://` will not work. Serve over HTTPS, or `python3 -m http.server` for local work
-(localhost also has to be allow-listed).
+## If you want a custom-sized chat window
+
+This version uses Ada's standard drawer. To size the window yourself, mount it into your own
+element with [`parentElement`](https://docs.ada.cx/chat/web/sdk-api-reference#parentelement)
+and give that element whatever dimensions you like. Two caveats that come with it:
+`toggle()` does not work in that mode (there is no drawer — you show and hide your own
+container), and no default chat button is rendered, so the page has to supply one.
 
 ## Files
 
 ```
-index.html                    the whole mockup — page, nudge, dock, demo panel
+index.html                    the whole mockup
 assets/journify-logo.png      real asset from shop.myjournify.com
 assets/contact-banner.png     real asset from shop.myjournify.com
 ```
 
 ## Status
 
-Verified: page renders, dwell timer, bubble show/dismiss, the
-`triggerNudge` → `start()` call sequence, dock open/close, size presets, and the
-allow-list failure path. The chat rendering *inside* the dock has not been verified — the
-Ada embed does not complete its handshake in headless Chrome, so that needs one pass in a
-real browser once the origin is allow-listed.
+Verified: the page renders, the dwell timer fires, the bubble shows and dismisses. The
+`setMetaFields` → `toggle` pair has not been seen running against the live bot — the Ada
+embed does not complete its handshake in headless Chrome, so that needs one pass in a real
+browser once the origin is allow-listed.
+
+The banner is Journify's real image and still reads "…in the contact form below", which no
+longer matches now that the form is gone.
 
 Unofficial mockup, built for an Ada demo. Not affiliated with Journify or Malaysia Aviation Group.
