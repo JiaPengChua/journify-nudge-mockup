@@ -115,23 +115,45 @@
 
 
 <script>
-  var DWELL_MS = 20000;   // time on page before the proactive fires
+  var IDLE_MS = 20000;   // how long the visitor must sit still before we nudge
 
   window.adaSettings = {
     handle: "journify-sandbox",
 
-    // Start counting only once Ada is ready — triggerProactive is a no-op
-    // if it is called before the embed has finished booting.
-    adaReadyCallback: function () {
-      setTimeout(function () {
-        // Ada renders its own teaser bubble next to the chat button and
-        // handles the click from there. The page must NOT call toggle()
-        // afterwards: that discards the proactive and the visitor gets
-        // the normal greeting instead.
-        window.adaEmbed.triggerProactive({ messageKey: "idlepdp" });
-      }, DWELL_MS);
-    }
+    // Arm only once Ada is ready — triggerProactive is a silent no-op if it
+    // is called before the embed has finished booting.
+    adaReadyCallback: armIdleTimer
   };
+
+  // Fire the proactive after IDLE_MS of no interaction. Any activity restarts
+  // the clock, and a backgrounded tab does not accrue idle time, so this is
+  // "stopped and unsure" rather than "has been here a while".
+  function armIdleTimer() {
+    var timer, fired = false;
+
+    function fire() {
+      if (fired) return;
+      fired = true;
+      // Ada draws its own teaser and handles the click. Do NOT call toggle()
+      // here — opening the drawer ourselves discards the proactive and the
+      // visitor just gets the normal greeting.
+      window.adaEmbed.triggerProactive({ messageKey: "idlepdp" });
+    }
+
+    function reset() {
+      if (fired) return;
+      clearTimeout(timer);
+      if (!document.hidden) timer = setTimeout(fire, IDLE_MS);
+    }
+
+    ["mousemove", "mousedown", "keydown", "scroll", "wheel", "touchstart"]
+      .forEach(function (evt) {
+        document.addEventListener(evt, reset, { passive: true });
+      });
+    document.addEventListener("visibilitychange", reset);
+
+    reset();
+  }
 
   // The meta-field approach this replaces — page draws its own bubble,
   // and on click sets the flag and opens the chat itself:

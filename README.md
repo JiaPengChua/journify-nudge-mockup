@@ -2,8 +2,8 @@
 
 A one-page mockup based on
 [shop.myjournify.com/support/contact-us](https://shop.myjournify.com/support/contact-us),
-stripped to the page shell. After the visitor has been on the page a while, the page fires an
-Ada **proactive** and Ada takes it from there.
+stripped to the page shell. When the visitor **goes idle**, the page fires an Ada
+**proactive** and Ada takes it from there.
 
 Live: **https://jiapengchua.github.io/journify-nudge-mockup/**
 Bot: `journify-sandbox` · Proactive: `idlepdp`
@@ -13,19 +13,48 @@ Bot: `journify-sandbox` · Proactive: `idlepdp`
 ```js
 window.adaSettings = {
   handle: "journify-sandbox",
-
-  // Start counting only once Ada is ready — triggerProactive is a no-op
-  // if it is called before the embed has finished booting.
-  adaReadyCallback: function () {
-    setTimeout(function () {
-      window.adaEmbed.triggerProactive({ messageKey: "idlepdp" });
-    }, DWELL_MS);
-  }
+  adaReadyCallback: armIdleTimer
 };
+
+function armIdleTimer() {
+  var timer, fired = false;
+
+  function fire() {
+    if (fired) return;
+    fired = true;
+    window.adaEmbed.triggerProactive({ messageKey: "idlepdp" });
+  }
+
+  function reset() {
+    if (fired) return;
+    clearTimeout(timer);
+    if (!document.hidden) timer = setTimeout(fire, IDLE_MS);
+  }
+
+  ["mousemove", "mousedown", "keydown", "scroll", "wheel", "touchstart"]
+    .forEach(function (evt) { document.addEventListener(evt, reset, { passive: true }); });
+  document.addEventListener("visibilitychange", reset);
+
+  reset();
+}
 ```
 
-That is all of it. Ada draws its own teaser bubble next to the chat button, and clicking it
-opens the chat with the proactive message already at the top of the transcript.
+Ada draws its own teaser bubble next to the chat button, and clicking it opens the chat with
+the proactive message already at the top of the transcript.
+
+## Idle, not elapsed time
+
+Any interaction restarts the clock, and a backgrounded tab accrues no idle time, so this
+fires on *"stopped, and probably unsure"* rather than *"has been here 20 seconds"*. Someone
+reading steadily down the page is never interrupted.
+
+Verified both ways: sit still past the threshold and the teaser appears; keep a mousemove
+going every 2s against an 8s threshold and it stays away for as long as the activity lasts,
+then appears once the visitor goes quiet.
+
+**The campaign does not fire itself.** `idlepdp` has `url_trigger_conditions: []`, so Ada
+never shows it on its own — it appears only because the page calls `triggerProactive`. The
+name describes the intent; the page supplies the idle detection.
 
 ## What testing this turned up
 
