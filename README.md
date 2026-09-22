@@ -100,9 +100,9 @@ Bottom-left **⚙ Demo controls** (delete the `jf-dev` block for production):
 
 The page only *sends* the flag. To make the agent behave differently on a nudge-initiated
 chat, create a variable named exactly `triggerNudge` on `journify-sandbox` — meta fields
-populate the matching variable — and branch on it. A nudged visitor arrived from a support
-form they had not finished, so the useful opening is context-aware
-("Still working on that form? …") rather than the generic greeting.
+populate the matching variable — and branch on it. A nudged visitor did not come looking for
+chat; the page interrupted them. That earns a different opening from someone who clicked the
+launcher themselves.
 
 Without that, `triggerNudge` is still recorded and visible in the **Meta variables** panel on
 each conversation, which is enough to measure nudge-attributed chats.
