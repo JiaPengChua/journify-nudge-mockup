@@ -1,7 +1,8 @@
 # Journify · custom chat window + self-hosted proactive nudge
 
-A single-file mockup of [shop.myjournify.com/support/contact-us](https://shop.myjournify.com/support/contact-us)
-showing the pattern Journify asked for:
+A single-file mockup based on [shop.myjournify.com/support/contact-us](https://shop.myjournify.com/support/contact-us)
+— stripped back to the page shell (real logo and banner, header, footer) so nothing competes
+with the thing being demonstrated. It shows the pattern Journify asked for:
 
 1. The **page** owns the chat window, so it can be any size it likes.
 2. The **page** owns the proactive nudge bubble — it appears after the visitor has dwelled
@@ -36,7 +37,8 @@ watches the bot boot inside the window rather than clicking into nothing.
 
 ## Two things Ada never does here
 
-**The bubble is not an Ada campaign.** It is ordinary page markup on a `setInterval`.
+**The bubble is not an Ada campaign.** It is ordinary page markup on a `setInterval` —
+a plain speech bubble in the Ada house style, click anywhere to open, small × to dismiss.
 That is the point — Journify controls the copy, the timing, the trigger conditions and the
 styling, and no Ada session exists until someone clicks. A dismissed nudge costs nothing.
 
@@ -127,7 +129,7 @@ assets/contact-banner.png     real asset from shop.myjournify.com
 
 ## Status
 
-Verified: page layout against the live original, dwell timer, bubble show/dismiss, the
+Verified: page renders, dwell timer, bubble show/dismiss, the
 `triggerNudge` → `start()` call sequence, dock open/close, size presets, and the
 allow-list failure path. The chat rendering *inside* the dock has not been verified — the
 Ada embed does not complete its handshake in headless Chrome, so that needs one pass in a
