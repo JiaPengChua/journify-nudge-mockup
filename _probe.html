@@ -1,0 +1,39 @@
+<!DOCTYPE html><html><head><meta charset="utf-8"><title>proactive probe</title></head>
+<body style="font:13px monospace;padding:16px">
+<pre id="out">booting…</pre>
+<script>
+var L=[],o=document.getElementById('out');
+function p(s){L.push(s);o.textContent=L.join('\n');}
+window.addEventListener('error',function(e){p('window error: '+e.message);});
+window.adaSettings={handle:"journify-sandbox",
+  adaReadyCallback:function(){p('adaReadyCallback fired');},
+  toggleCallback:function(x){p('toggleCallback('+x+')');}};
+var t0=Date.now();
+var iv=setInterval(function(){
+  if(!window.adaEmbed) return;
+  clearInterval(iv);
+  p('adaEmbed present @'+(Date.now()-t0)+'ms');
+  setTimeout(function(){
+    p('-- DOM before --');
+    p('  ada-button-frame: '+!!document.getElementById('ada-button-frame'));
+    p('  ada-chat-frame  : '+!!document.getElementById('ada-chat-frame'));
+    try{
+      var r=window.adaEmbed.triggerProactive({messageKey:"idlepdp"});
+      p('triggerProactive returned: '+(r&&r.then?'a promise':String(r)));
+      if(r&&r.then){r.then(function(){p('  proactive promise RESOLVED');}).catch(function(e){p('  proactive REJECTED: '+e);});}
+    }catch(e){p('triggerProactive THREW: '+e.message);}
+    window.adaEmbed.toggle().then(function(){p('toggle() resolved');}).catch(function(e){p('toggle() rejected: '+e);});
+    setTimeout(function(){
+      p('-- DOM after 6s --');
+      p('  ada-chat-frame: '+!!document.getElementById('ada-chat-frame'));
+      window.adaEmbed.getInfo().then(function(i){p('getInfo: '+JSON.stringify(i));});
+      window.adaEmbed.getConversation().then(function(c){
+        p('conversation msgs: '+((c&&c.messages&&c.messages.length)||0));
+        p(JSON.stringify(c).slice(0,600));
+      }).catch(function(e){p('getConversation: '+e);});
+    },6000);
+  },3000);
+},100);
+</script>
+<script async src="https://static.ada.support/embed2.js"></script>
+</body></html>
