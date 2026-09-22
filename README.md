@@ -78,6 +78,15 @@ a backgrounded tab accrues no idle time — so this fires on *"stopped, and prob
 rather than *"has been here 10 seconds"*. `IDLE_MS` is 10s so the demo is quick to show; a
 real page would use 45–90s.
 
+**It nudges once per page load, and never again.** Once the bubble has shown, or once the
+visitor has opened the chat by any route, the timer is finished for that visit — closing or
+minimising the chat does not earn another nudge. Someone who has already been asked, or has
+already engaged, is left alone.
+
+Note `mousemove` counts as activity, so testing means actually taking your hand off the
+mouse for the full interval, and re-testing means a fresh page load (hard-reload: the page
+is served with `cache-control: max-age=600`).
+
 ## Wiring the Ada side
 
 The page only *sends* the flag. Create a variable named exactly `triggerNudge` on
