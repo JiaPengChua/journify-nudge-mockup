@@ -75,8 +75,8 @@ this page uses the meta field, because the nudge is the page's own.
 
 Any of mousemove / mousedown / keydown / scroll / wheel / touchstart restarts the clock, and
 a backgrounded tab accrues no idle time — so this fires on *"stopped, and probably unsure"*
-rather than *"has been here 20 seconds"*. `IDLE_MS` is 20s for demo purposes; a real page
-would use 45–90s.
+rather than *"has been here 10 seconds"*. `IDLE_MS` is 10s so the demo is quick to show; a
+real page would use 45–90s.
 
 ## Wiring the Ada side
 
