@@ -140,11 +140,18 @@
   // 1. nudge after the visitor has been on the page a while
   setTimeout(function () { nudge.classList.add("show"); }, DWELL_MS);
 
-  // 2. accepted -> set the meta field, then open the bot
+  // 2. accepted -> fire the proactive, then open the bot
   nudge.onclick = function () {
     nudge.classList.remove("show");
-    window.adaEmbed.setMetaFields({ triggerNudge: true })
-      .then(function () { window.adaEmbed.toggle(); });
+
+    // "idlepdp" on journify-sandbox: "Hi There! Need here to find the perfect flypass?"
+    // Static message, so no params. Returns void, not a promise.
+    window.adaEmbed.triggerProactive({ messageKey: "idlepdp" });
+    window.adaEmbed.toggle();
+
+    // the meta-field approach this replaces:
+    // window.adaEmbed.setMetaFields({ triggerNudge: true })
+    //   .then(function () { window.adaEmbed.toggle(); });
   };
 
   // dismissed -> nothing happens
