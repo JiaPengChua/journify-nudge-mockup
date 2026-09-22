@@ -78,6 +78,13 @@ a backgrounded tab accrues no idle time — so this fires on *"stopped, and prob
 rather than *"has been here 10 seconds"*. `IDLE_MS` is 10s so the demo is quick to show; a
 real page would use 45–90s.
 
+The timer **re-arms**. Closing or minimising the chat, or dismissing the bubble, starts a
+fresh idle spell and earns a fresh nudge; nothing fires while the chat is open. Ada's own
+minimise and close buttons come through `toggleCallback`, so they re-arm it too.
+
+Note `mousemove` counts as activity, so testing means actually taking your hand off the
+mouse for the full interval.
+
 ## Wiring the Ada side
 
 The page only *sends* the flag. Create a variable named exactly `triggerNudge` on

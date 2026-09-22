@@ -174,13 +174,48 @@
 <script>
   var IDLE_MS = 10000;   // how long the visitor must sit still before we nudge
 
-  var nudge    = document.getElementById("nudge"),
-      launcher = document.getElementById("launcher"),
-      started  = false;
+  var nudge     = document.getElementById("nudge"),
+      launcher  = document.getElementById("launcher"),
+      started   = false,   // has Embed2 been loaded at all
+      chatOpen  = false,   // is the chat window currently showing
+      idleTimer = null;
 
-  // Nothing loads until the visitor asks for it: no chatter is created and the
-  // conversation-start playbook does not run until openChat() calls start().
+  // Nothing loads until openChat(): no chatter is created and the
+  // conversation-start playbook does not run until the visitor opens the chat.
   window.adaSettings = { lazy: true };
+
+  /* ---------------- nudge ---------------- */
+
+  function showNudge() {
+    if (chatOpen) return;
+    nudge.classList.add("show");
+    launcher.classList.add("nudging");
+  }
+
+  function hideNudge() {
+    nudge.classList.remove("show");
+    launcher.classList.remove("nudging");
+  }
+
+  // Re-armable: every time the chat is closed or the bubble is dismissed, a
+  // fresh idle spell earns a fresh nudge.
+  function armIdle() {
+    clearTimeout(idleTimer);
+    if (chatOpen || document.hidden) return;
+    idleTimer = setTimeout(showNudge, IDLE_MS);
+  }
+
+  function onActivity() {
+    // a bubble that is already up stays up; otherwise restart the clock
+    if (!nudge.classList.contains("show")) armIdle();
+  }
+
+  ["mousemove", "mousedown", "keydown", "scroll", "wheel", "touchstart"]
+    .forEach(function (evt) { document.addEventListener(evt, onActivity, { passive: true }); });
+  document.addEventListener("visibilitychange", onActivity);
+  armIdle();
+
+  /* ---------------- chat ---------------- */
 
   function openChat(viaNudge) {
     hideNudge();
@@ -199,39 +234,19 @@
       handle: "journify-sandbox",
       metaFields: { triggerNudge: !!viaNudge },
       adaReadyCallback: function () { window.adaEmbed.toggle(); },
-      toggleCallback: function (isOpen) { launcher.classList.toggle("open", isOpen); }
+      toggleCallback: onChatToggled
     });
   }
 
-  function hideNudge() {
-    nudge.classList.remove("show");
-    launcher.classList.remove("nudging");
+  // Fires for our own toggle() and for Ada's minimise / close buttons alike.
+  function onChatToggled(isOpen) {
+    chatOpen = isOpen;
+    launcher.classList.toggle("open", isOpen);
+    if (isOpen) { hideNudge(); clearTimeout(idleTimer); }
+    else armIdle();          // minimised or closed -> nudge again when idle
   }
 
-  // Fire after IDLE_MS of no interaction. Any activity restarts the clock and a
-  // hidden tab accrues no idle time, so this is "stopped and unsure" rather
-  // than "has been here a while".
-  (function armIdleTimer() {
-    var timer, fired = false;
-
-    function fire() {
-      if (fired || started) return;
-      fired = true;
-      nudge.classList.add("show");
-      launcher.classList.add("nudging");
-    }
-
-    function reset() {
-      if (fired) return;
-      clearTimeout(timer);
-      if (!document.hidden) timer = setTimeout(fire, IDLE_MS);
-    }
-
-    ["mousemove", "mousedown", "keydown", "scroll", "wheel", "touchstart"]
-      .forEach(function (evt) { document.addEventListener(evt, reset, { passive: true }); });
-    document.addEventListener("visibilitychange", reset);
-    reset();
-  })();
+  /* ---------------- wiring ---------------- */
 
   nudge.onclick = function (e) {
     if (e.target.closest("#nudgeClose")) return;
@@ -240,10 +255,10 @@
   document.getElementById("nudgeClose").onclick = function (e) {
     e.stopPropagation();
     hideNudge();
+    armIdle();               // dismissed -> allow another nudge after more idling
   };
   launcher.onclick = function () {
-    if (!started) return openChat(false);
-    window.adaEmbed.toggle();
+    started ? window.adaEmbed.toggle() : openChat(false);
   };
 </script>
 <script async src="https://static.ada.support/embed2.js"></script>
