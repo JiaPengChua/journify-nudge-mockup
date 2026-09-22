@@ -2,56 +2,74 @@
 
 A one-page mockup based on
 [shop.myjournify.com/support/contact-us](https://shop.myjournify.com/support/contact-us),
-stripped to the page shell. Ada's chat is mounted inside **Journify's own 400×620 window**,
-and when the visitor goes idle the page shows **its own nudge bubble**. Accepting it sets
-the meta field `triggerNudge = true` and opens the window.
+stripped to the page shell. Nothing Ada-related loads until the visitor asks for it. When
+they go idle the page shows **its own nudge bubble**; accepting it starts the conversation
+with `triggerNudge = true` already set, and opens a **400×620 window**.
 
 Live: **https://jiapengchua.github.io/journify-nudge-mockup/** · Bot: `journify-sandbox`
 
 ## The integration
 
 ```js
-// parentElement MUST be declared here, not passed to start().
-window.adaSettings = {
-  handle: "journify-sandbox",
-  parentElement: document.getElementById("chat-mount"),
-  adaReadyCallback: armIdleTimer
-};
+// Nothing loads until openChat(): no chatter, and the conversation-start
+// playbook does not run until the visitor actually opens the chat.
+window.adaSettings = { lazy: true };
 
 function openChat(viaNudge) {
-  dock.classList.add("open");                                  // our own window
-  if (viaNudge) window.adaEmbed.setMetaFields({ triggerNudge: true });
+  if (started) {
+    if (viaNudge) window.adaEmbed.setMetaFields({ triggerNudge: true });
+    return window.adaEmbed.toggle();
+  }
+  started = true;
+  // start() is what creates the conversation, so meta fields passed here are on
+  // the chatter *before* the conversation-start playbook runs.
+  window.adaEmbed.start({
+    handle: "journify-sandbox",
+    metaFields: { triggerNudge: !!viaNudge },
+    adaReadyCallback: function () { window.adaEmbed.toggle(); },
+    toggleCallback: function (isOpen) { launcher.classList.toggle("open", isOpen); }
+  });
 }
 ```
 
-The page owns the launcher, the bubble, the window and its size. Ada's iframe just fills
-whatever box it is given:
+## Custom window size without `parentElement`
+
+Ada's drawer is a `position: fixed` iframe on the host page, so the page can just restyle it.
+This keeps `lazy` and `toggle()`, which `parentElement` would take away:
 
 ```css
-#dock { width: 400px; height: 620px; }
-#chat-mount iframe { width: 100% !important; height: 100% !important; }
+#ada-button-frame { display: none !important; }   /* we supply our own launcher */
+
+#ada-chat-frame {
+  width: 400px !important;  max-width: 400px !important;
+  height: 620px !important; max-height: calc(100vh - 110px) !important;
+  right: 24px !important;   bottom: 94px !important;
+}
 ```
 
-## `parentElement` mechanics, measured
+`max-width` is the one that catches you out: Embed2 sets `max-width: 375px` **inline**, so
+overriding `width` alone silently clamps back to 375px. A stylesheet `!important` beats an
+inline declaration, so both are needed.
+
+## Why not `parentElement`
+
+`parentElement` also gives a custom size, but it forces the conversation to start on page
+load — which is exactly the problem this build exists to avoid. Measured:
 
 | how it is passed | what happens |
 | --- | --- |
-| in `adaSettings`, no `lazy` | ✅ mounts into your element, no default button |
-| in `start()` | ❌ **never resolves**, nothing mounts, no error |
-| `lazy` + in `adaSettings` + `start({handle})` | ❌ `parentElement` ignored — you get the default button |
+| in `adaSettings`, no `lazy` | mounts into your element, **but the chat initialises immediately** |
+| in `start()` | **never resolves**, nothing mounts, no error |
+| `lazy` + in `adaSettings` + `start({handle})` | `parentElement` silently ignored |
 
 `start()` options **replace** `adaSettings` rather than merging, and a `parentElement` handed
-to `start()` hangs, so `lazy` and `parentElement` cannot be combined. The chat therefore
-initialises on page load — which is why the docs advise against putting `parentElement` on
-every page. The window stays hidden behind a CSS class until the visitor wants it.
+to `start()` hangs, so `lazy` and `parentElement` cannot be combined. It also removes the
+default launcher and disables `toggle()`.
 
-`toggle()` is also unavailable in this mode, so the page shows and hides `#dock` itself. The
-conversation survives a close; only `reset()` or `stop()` end it.
-
-Ada's own proactive campaigns cannot be used with a custom window either: `triggerProactive`
-has no button to anchor its teaser to and no drawer to open, so it resolves successfully and
-does nothing. That is why the nudge here is the page's own and the agent is told about it
-through a meta field.
+Ada's own proactive campaigns are unusable with `parentElement` too: `triggerProactive` has
+no button to anchor its teaser to and no drawer to open, so it resolves successfully and does
+nothing. The CSS approach above keeps the real drawer, so proactives would work here — but
+this page uses the meta field, because the nudge is the page's own.
 
 ## Idle, not elapsed time
 
@@ -86,9 +104,9 @@ assets/contact-banner.png     real asset from shop.myjournify.com
 
 ## Status
 
-Verified against the live bot in a driven browser session: the chat mounts inside the custom
-window, the nudge appears only after real idle, clicking it opens the window and
-`getMetaFields()` returns `{"triggerNudge": true}`.
+Verified against the live bot in a driven browser session: **no Ada DOM node exists before
+the click** (no chatter, no playbook run), the nudge appears only after real idle, clicking
+it opens a 400×620 window, and `getMetaFields()` returns `{"triggerNudge": true}`.
 
 The banner is Journify's real image and still reads "…in the contact form below", which no
 longer matches now that the form is gone.

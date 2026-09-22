@@ -59,7 +59,7 @@
     font-size:12.5px;color:rgba(255,255,255,.6)}
 
 
-  /* ---- custom chat widget: launcher, dock, nudge ---- */
+  /* ---- custom chat widget: launcher + nudge ---- */
   #launcher{position:fixed;right:24px;bottom:24px;z-index:9000;width:58px;height:58px;border-radius:50%;
     border:0;cursor:pointer;background:var(--orange);box-shadow:0 8px 24px rgba(255,144,39,.45);
     display:grid;place-items:center;transition:transform .15s,background .15s}
@@ -72,20 +72,18 @@
     background:#e03131;border:2px solid #fff;opacity:0;transform:scale(.4);transition:all .2s}
   #launcher.nudging .pip{opacity:1;transform:scale(1)}
 
-  /* the custom-sized chat window - Ada's iframe fills whatever box we give it */
-  #dock{position:fixed;right:24px;bottom:94px;z-index:9001;
-    width:400px;height:620px;max-height:calc(100vh - 130px);
-    background:#fff;border:1px solid var(--line);border-radius:16px;overflow:hidden;
-    box-shadow:0 18px 50px rgba(34,43,48,.26);display:flex;flex-direction:column;
-    opacity:0;transform:translateY(16px) scale(.98);pointer-events:none;
-    transition:opacity .22s ease,transform .22s ease}
-  #dock.open{opacity:1;transform:none;pointer-events:auto}
-  #dock-bar{display:flex;align-items:center;gap:10px;padding:11px 14px;background:var(--orange);color:#fff;flex:none}
-  #dock-bar img{height:19px;width:auto;filter:brightness(0) invert(1)}
-  #dock-bar .ttl{font-size:14px;font-weight:800}
-  #dock-bar button{margin-left:auto;border:0;background:transparent;color:#fff;font-size:20px;line-height:1;cursor:pointer}
-  #chat-mount{flex:1;min-height:0}
-  #chat-mount iframe{width:100%!important;height:100%!important;border:0;display:block}
+  /* Ada's own launcher stays hidden — the page supplies its own. */
+  #ada-button-frame{display:none!important}
+
+  /* The chat window is Ada's drawer, a position:fixed iframe, resized here.
+     !important beats the inline styles Embed2 sets on it. */
+  #ada-chat-frame{
+    width:400px!important;  max-width:400px!important;   /* Embed2 pins max-width:375px inline */
+    height:620px!important; max-height:calc(100vh - 110px)!important;
+    right:24px!important; bottom:94px!important;
+    border-radius:16px!important;
+    box-shadow:0 18px 50px rgba(34,43,48,.26)!important;
+  }
 
   /* our own nudge bubble */
   #nudge{position:fixed;right:22px;bottom:94px;z-index:9002;max-width:270px;
@@ -99,7 +97,9 @@
     font-size:16px;line-height:1;cursor:pointer;padding:3px 5px;border-radius:6px}
   #nudgeClose:hover{background:#f1f3f4;color:var(--ink)}
   @media(max-width:520px){
-    #dock{right:12px;left:12px;bottom:88px;width:auto;height:70vh}
+    #ada-chat-frame{right:12px!important;left:12px!important;
+      width:auto!important;max-width:none!important;
+      bottom:88px!important;height:70vh!important}
     #nudge{right:12px;left:12px;max-width:none}
   }
 </style>
@@ -158,23 +158,13 @@
 </footer>
 
 
-<!-- the custom-sized chat window; Ada mounts its iframe into #chat-mount -->
-<div id="dock" role="dialog" aria-label="Journify chat">
-  <div id="dock-bar">
-    <img src="assets/journify-logo.png" alt="" />
-    <span class="ttl">Help</span>
-    <button id="dockClose" aria-label="Close">&times;</button>
-  </div>
-  <div id="chat-mount"></div>
-</div>
-
 <!-- our own nudge bubble -->
 <div id="nudge" role="button" tabindex="0">
   <button id="nudgeClose" aria-label="Dismiss">&times;</button>
   Choose flypass?
 </div>
 
-<!-- our own launcher; Ada renders no button in parentElement mode -->
+<!-- our own launcher; Ada's is hidden by CSS -->
 <button id="launcher" aria-label="Open chat">
   <span class="pip"></span>
   <svg class="chat" viewBox="0 0 24 24"><path d="M12 3C6.98 3 3 6.58 3 11c0 2.4 1.19 4.54 3.07 5.98V21l3.6-2.02c.74.16 1.52.25 2.33.25 5.02 0 9-3.58 9-8s-3.98-8.23-9-8.23z"/></svg>
@@ -184,42 +174,48 @@
 <script>
   var IDLE_MS = 20000;   // how long the visitor must sit still before we nudge
 
-  var dock     = document.getElementById("dock"),
-      nudge    = document.getElementById("nudge"),
-      launcher = document.getElementById("launcher");
+  var nudge    = document.getElementById("nudge"),
+      launcher = document.getElementById("launcher"),
+      started  = false;
 
-  // parentElement MUST be declared here, not passed to start() — start()
-  // never resolves when given a parentElement, and it ignores the one in
-  // adaSettings. So the chat mounts on page load and we keep #dock hidden
-  // with CSS until the visitor wants it.
-  window.adaSettings = {
-    handle: "journify-sandbox",
-    parentElement: document.getElementById("chat-mount"),
-    adaReadyCallback: armIdleTimer
-  };
+  // Nothing loads until the visitor asks for it: no chatter is created and the
+  // conversation-start playbook does not run until openChat() calls start().
+  window.adaSettings = { lazy: true };
 
   function openChat(viaNudge) {
+    hideNudge();
+
+    if (started) {
+      if (viaNudge) window.adaEmbed.setMetaFields({ triggerNudge: true });
+      window.adaEmbed.toggle();
+      return;
+    }
+
+    started = true;
+    // start() is what creates the conversation, so meta fields passed here are
+    // on the chatter before the conversation-start playbook runs. Setting them
+    // afterwards would be too late for the playbook to branch on.
+    window.adaEmbed.start({
+      handle: "journify-sandbox",
+      metaFields: { triggerNudge: !!viaNudge },
+      adaReadyCallback: function () { window.adaEmbed.toggle(); },
+      toggleCallback: function (isOpen) { launcher.classList.toggle("open", isOpen); }
+    });
+  }
+
+  function hideNudge() {
     nudge.classList.remove("show");
     launcher.classList.remove("nudging");
-    dock.classList.add("open");
-    launcher.classList.add("open");
-    // tell the agent this chat began from the nudge, not a launcher click
-    if (viaNudge) window.adaEmbed.setMetaFields({ triggerNudge: true });
   }
 
-  function closeChat() {
-    dock.classList.remove("open");
-    launcher.classList.remove("open");
-  }
-
-  // Fire after IDLE_MS of no interaction. Any activity restarts the clock and
-  // a hidden tab accrues no idle time, so this is "stopped and unsure" rather
+  // Fire after IDLE_MS of no interaction. Any activity restarts the clock and a
+  // hidden tab accrues no idle time, so this is "stopped and unsure" rather
   // than "has been here a while".
-  function armIdleTimer() {
+  (function armIdleTimer() {
     var timer, fired = false;
 
     function fire() {
-      if (fired || dock.classList.contains("open")) return;
+      if (fired || started) return;
       fired = true;
       nudge.classList.add("show");
       launcher.classList.add("nudging");
@@ -235,7 +231,7 @@
       .forEach(function (evt) { document.addEventListener(evt, reset, { passive: true }); });
     document.addEventListener("visibilitychange", reset);
     reset();
-  }
+  })();
 
   nudge.onclick = function (e) {
     if (e.target.closest("#nudgeClose")) return;
@@ -243,13 +239,12 @@
   };
   document.getElementById("nudgeClose").onclick = function (e) {
     e.stopPropagation();
-    nudge.classList.remove("show");
-    launcher.classList.remove("nudging");
+    hideNudge();
   };
   launcher.onclick = function () {
-    dock.classList.contains("open") ? closeChat() : openChat(false);
+    if (!started) return openChat(false);
+    window.adaEmbed.toggle();
   };
-  document.getElementById("dockClose").onclick = closeChat;
 </script>
 <script async src="https://static.ada.support/embed2.js"></script>
 
