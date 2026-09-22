@@ -2,65 +2,74 @@
 
 A one-page mockup based on
 [shop.myjournify.com/support/contact-us](https://shop.myjournify.com/support/contact-us),
-stripped to the page shell so nothing competes with the thing being shown:
-
-1. Journify renders **its own nudge bubble** after the visitor has been on the page a while.
-2. Clicking it sets the meta field **`triggerNudge = true`**.
-3. Then it opens the bot.
+stripped to the page shell. After the visitor has been on the page a while, the page fires an
+Ada **proactive** and Ada takes it from there.
 
 Live: **https://jiapengchua.github.io/journify-nudge-mockup/**
-Bot: `journify-sandbox`
+Bot: `journify-sandbox` · Proactive: `idlepdp`
 
 ## The whole integration
 
 ```js
-window.adaSettings = { handle: "journify-sandbox" };
+window.adaSettings = {
+  handle: "journify-sandbox",
 
-// 1. nudge after the visitor has been on the page a while
-setTimeout(function () { nudge.classList.add("show"); }, DWELL_MS);
-
-// 2. accepted -> set the meta field, then open the bot
-nudge.onclick = function () {
-  nudge.classList.remove("show");
-  window.adaEmbed.setMetaFields({ triggerNudge: true })
-    .then(function () { window.adaEmbed.toggle(); });
+  // Start counting only once Ada is ready — triggerProactive is a no-op
+  // if it is called before the embed has finished booting.
+  adaReadyCallback: function () {
+    setTimeout(function () {
+      window.adaEmbed.triggerProactive({ messageKey: "idlepdp" });
+    }, DWELL_MS);
+  }
 };
 ```
 
-That is all of it. The bubble is ordinary page markup on a `setTimeout` — Ada knows nothing
-about it, so Journify owns the copy, the timing and the trigger conditions. Dismissing it
-does nothing at all.
+That is all of it. Ada draws its own teaser bubble next to the chat button, and clicking it
+opens the chat with the proactive message already at the top of the transcript.
 
-`toggle()` opens Ada's standard chat window, and Ada's standard chat button is on the page
-from the start, so a visitor who wants chat before the nudge fires can still get it.
+## What testing this turned up
 
-## Wiring the Ada side
+**`messageKey` is the campaign's `key`, not the id in the dashboard URL.** The URL
+`/proactives/6a0d1c47e8764eb2ae1bd606` is the id; the key is `idlepdp`. Passing the id
+silently does nothing. `adacli journify-sandbox proactives get <id>` prints both.
 
-The page only *sends* the flag. To make the agent behave differently on a nudge-initiated
-chat, create a variable named exactly `triggerNudge` on `journify-sandbox` — meta fields
-populate the matching variable — and branch on it. A nudged visitor did not come looking for
-chat; the page interrupted them. That earns a different opening from someone who clicked the
-chat button themselves.
+**Call it after `adaReadyCallback`.** Fired on a bare `setTimeout` from page load it can beat
+the embed's boot, and then nothing renders and nothing errors. This was the one real bug
+found while wiring it up.
 
-Either way the flag is recorded and visible in the **Meta variables** panel on each
-conversation, which is enough to measure nudge-attributed chats.
+**Do not call `toggle()` afterwards.** Opening the drawer programmatically throws the
+proactive away — the visitor gets the standard greeting and the proactive text never appears.
+Verified: open via `toggle()` → transcript is the normal 4-message greeting; open by clicking
+the teaser → the proactive is the first message, greeting follows.
+
+**Do not draw your own bubble as well.** `triggerProactive` renders Ada's own
+`#ada-intro-frame`. A page-drawn bubble on top of it means two bubbles.
+
+**It returns a Promise**, despite the reference giving the signature as `void`. It resolves
+`null` once the teaser is up.
+
+## Proactive vs. the meta-field approach
+
+| | `triggerProactive` | `setMetaFields({ triggerNudge: true })` |
+| --- | --- | --- |
+| Who draws the bubble | Ada | your page |
+| Who owns the copy | the Ada dashboard | your page |
+| Opens the chat | visitor clicks the teaser | your page calls `toggle()` |
+| Agent knows why | the message is in the transcript | branch on a variable |
+
+Use the proactive when the nudge is a message. Use the meta field when you need the page's
+own bubble — a different position, your own styling, or conditions Ada cannot express — and
+want the agent to *behave* differently rather than say something specific. The meta-field
+version is left commented in `index.html`.
 
 ## Before it will run
 
-**The origin serving this page must be on the bot's iframe allow list** — Ada CSP-gates the
-chat iframe. Add `https://jiapengchua.github.io` under Settings → Security on
-`journify-sandbox`, **with no trailing slash** (a trailing `/` silently kills the frame).
+The origin serving the page must be on the bot's iframe allow list (Settings → Security on
+`journify-sandbox`). `https://jiapengchua.github.io/` is on it. `http://localhost:3000` is
+too, which is the easiest way to work on this locally.
 
-`file://` will not work. Serve over HTTPS, or `python3 -m http.server` locally — localhost
-has to be allow-listed too.
-
-## If you want a custom-sized chat window
-
-This version uses Ada's standard drawer. To size the window yourself, mount it into your own
-element with [`parentElement`](https://docs.ada.cx/chat/web/sdk-api-reference#parentelement)
-and give that element whatever dimensions you like. Two caveats that come with it:
-`toggle()` does not work in that mode (there is no drawer — you show and hide your own
-container), and no default chat button is rendered, so the page has to supply one.
+Contrary to what I said earlier in this repo's history, the **trailing slash is fine** —
+`https://jiapengchua.github.io/` is on the list with one and the widget loads.
 
 ## Files
 
@@ -72,10 +81,10 @@ assets/contact-banner.png     real asset from shop.myjournify.com
 
 ## Status
 
-Verified: the page renders, the dwell timer fires, the bubble shows and dismisses. The
-`setMetaFields` → `toggle` pair has not been seen running against the live bot — the Ada
-embed does not complete its handshake in headless Chrome, so that needs one pass in a real
-browser once the origin is allow-listed.
+Verified end to end against the live bot in a real browser session: page renders, the
+proactive fires after the dwell, Ada's teaser appears with the dashboard copy
+("Hi There! Need here to find the perfect flypass?"), and clicking it opens the chat with
+that message first in the transcript.
 
 The banner is Journify's real image and still reads "…in the contact form below", which no
 longer matches now that the form is gone.
