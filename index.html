@@ -154,7 +154,7 @@
       <div class="store"><div><div class="s1">GET IT ON</div><div class="s2">Google Play</div></div></div>
     </div>
   </div>
-  <div class="copy">&copy; 2026 Journify. All rights reserved. &mdash; Unofficial mockup for an Ada proactive-nudge demo.</div>
+  <div class="copy">&copy; 2026 Journify. All rights reserved. &mdash; Unofficial mockup for an Ada idle-nudge demo.</div>
 </footer>
 
 
@@ -203,8 +203,7 @@
     launcher.classList.remove("nudging");
     dock.classList.add("open");
     launcher.classList.add("open");
-    // triggerProactive does nothing in this mode (no teaser to render and no
-    // toggle to open), so the agent is told why the chat opened instead.
+    // tell the agent this chat began from the nudge, not a launcher click
     if (viaNudge) window.adaEmbed.setMetaFields({ triggerNudge: true });
   }
 

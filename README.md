@@ -4,29 +4,9 @@ A one-page mockup based on
 [shop.myjournify.com/support/contact-us](https://shop.myjournify.com/support/contact-us),
 stripped to the page shell. Ada's chat is mounted inside **Journify's own 400×620 window**,
 and when the visitor goes idle the page shows **its own nudge bubble**. Accepting it sets
-`triggerNudge = true` and opens the window.
+the meta field `triggerNudge = true` and opens the window.
 
 Live: **https://jiapengchua.github.io/journify-nudge-mockup/** · Bot: `journify-sandbox`
-
-## Does `triggerProactive` work with a custom widget? No.
-
-Tested directly against the live bot, both ways:
-
-| | default Ada widget | custom widget (`parentElement`) |
-| --- | --- | --- |
-| `triggerProactive` renders | `#ada-intro-frame` teaser beside Ada's button | **nothing** |
-| Proactive text reaches the transcript | yes, when the visitor clicks the teaser | **no** — transcript is the standard greeting |
-| Return value | Promise resolving `null` | Promise resolving `null` — resolves either way, so it looks like it worked |
-
-It needs Ada's own button to anchor the teaser to and its own drawer to open, and
-`parentElement` removes both. It fails silently: the call resolves, and nothing happens.
-
-Worth knowing even on the default widget: opening the drawer yourself with `toggle()` after
-firing a proactive **discards it** — the visitor gets the normal greeting. Only a click on
-Ada's teaser carries the message into the conversation.
-
-So with a custom window the nudge has to be the page's own, and the way to tell the agent
-about it is a meta field.
 
 ## The integration
 
@@ -44,7 +24,8 @@ function openChat(viaNudge) {
 }
 ```
 
-The page owns the launcher, the window and its size; Ada's iframe just fills the box.
+The page owns the launcher, the bubble, the window and its size. Ada's iframe just fills
+whatever box it is given:
 
 ```css
 #dock { width: 400px; height: 620px; }
@@ -59,13 +40,18 @@ The page owns the launcher, the window and its size; Ada's iframe just fills the
 | in `start()` | ❌ **never resolves**, nothing mounts, no error |
 | `lazy` + in `adaSettings` + `start({handle})` | ❌ `parentElement` ignored — you get the default button |
 
-So `lazy` and `parentElement` cannot be combined: `start()` options replace `adaSettings`
-rather than merging, and a `parentElement` handed to `start()` hangs. The consequence is that
-the chat initialises on page load, which is why the docs advise against putting
-`parentElement` on every page. The window stays hidden behind a CSS class until wanted.
+`start()` options **replace** `adaSettings` rather than merging, and a `parentElement` handed
+to `start()` hangs, so `lazy` and `parentElement` cannot be combined. The chat therefore
+initialises on page load — which is why the docs advise against putting `parentElement` on
+every page. The window stays hidden behind a CSS class until the visitor wants it.
 
 `toggle()` is also unavailable in this mode, so the page shows and hides `#dock` itself. The
 conversation survives a close; only `reset()` or `stop()` end it.
+
+Ada's own proactive campaigns cannot be used with a custom window either: `triggerProactive`
+has no button to anchor its teaser to and no drawer to open, so it resolves successfully and
+does nothing. That is why the nudge here is the page's own and the agent is told about it
+through a meta field.
 
 ## Idle, not elapsed time
 
@@ -76,12 +62,12 @@ would use 45–90s.
 
 ## Wiring the Ada side
 
-Create a variable named exactly `triggerNudge` on `journify-sandbox` — meta fields populate
-the matching variable — and branch on it. The `idlepdp` proactive's copy
-("Hi There! Need here to find the perfect flypass?") is a good model for what that branch
-should open with, since the proactive itself cannot be used here.
+The page only *sends* the flag. Create a variable named exactly `triggerNudge` on
+`journify-sandbox` — meta fields populate the matching variable — and branch on it. A nudged
+visitor did not come looking for chat; the page interrupted them, so that earns a different
+opening from someone who clicked the launcher themselves.
 
-The flag is recorded either way and shows in the **Meta variables** panel on each
+Either way the flag is recorded and shows in the **Meta variables** panel on each
 conversation, which is enough to measure nudge-attributed chats.
 
 ## Before it will run
