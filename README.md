@@ -78,14 +78,50 @@ a backgrounded tab accrues no idle time — so this fires on *"stopped, and prob
 rather than *"has been here 10 seconds"*. `IDLE_MS` is 10s so the demo is quick to show; a
 real page would use 45–90s.
 
-**It nudges once per page load, and never again.** Once the bubble has shown, or once the
-visitor has opened the chat by any route, the timer is finished for that visit — closing or
-minimising the chat does not earn another nudge. Someone who has already been asked, or has
-already engaged, is left alone.
+It nudges **once per page load**. Once the bubble has shown, or the visitor has opened the
+chat by any route, the timer is finished for that visit.
 
 Note `mousemove` counts as activity, so testing means actually taking your hand off the
-mouse for the full interval, and re-testing means a fresh page load (hard-reload: the page
-is served with `cache-control: max-age=600`).
+mouse, and re-testing means a fresh page load (hard-reload: the page is served with
+`cache-control: max-age=600`).
+
+## First visit vs. returning visit
+
+A `localStorage` flag splits the two:
+
+| | first visit | returning visit |
+| --- | --- | --- |
+| On idle | bubble appears, visitor chooses | chat opens and asks the question for them |
+| Meta fields | `triggerNudge` by route, `returning: false` | `triggerNudge: true`, `returning: true` |
+| Visitor sees | "Choose flypass?" bubble | the question already asked, bot answering |
+
+A returning visitor has been offered the bubble before, so they get the answer instead of the
+offer. Storage is wrapped in try/catch — a private window or blocked storage just reads as a
+first visit.
+
+## Sending the question is fiddlier than it looks
+
+`sendMessage` needs `enableProgrammaticControl: true`, and the chat frame only goes live a
+few seconds **after** the drawer opens. Before then the call either rejects with *"Chat is
+not ready yet to send a message"* or **hangs without ever settling** — which strands a naive
+retry chain. Three things this build needs:
+
+- **Poll a read-only call** (`getMessages`) until the frame answers, then send once. Polling
+  a write would risk duplicates.
+- **A watchdog**, because the probe itself can hang.
+- **A `sent` latch**, because the watchdog starts a fresh poll and without the latch every
+  surviving chain sends its own copy. An earlier version posted the question four times.
+
+Don't chain the send on `toggle()`'s promise either — that stranded it entirely in testing.
+
+**`headless: true` does not work for this.** Passed to `start()` it hangs like
+`parentElement`; declared in `adaSettings` it starts, but `sendMessage` then times out with
+*"chat frame did not respond in time"*. The chat has to be genuinely open for a send to land,
+so the returning-visitor path opens the drawer.
+
+**Security note for the client:** `enableProgrammaticControl` lets *any* script on the page —
+analytics, GTM, ad pixels, session replay — read full message bodies including anything the
+visitor types. It should be an explicit decision, not a default.
 
 ## Wiring the Ada side
 

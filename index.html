@@ -172,53 +172,33 @@
 </button>
 
 <script>
-  var IDLE_MS = 10000;   // how long the visitor must sit still before we nudge
+  var IDLE_MS = 10000;          // how long the visitor must sit still
+  var PROMPT  = "Choose flypass?";   // what a returning visitor asks the bot
 
   var nudge    = document.getElementById("nudge"),
       launcher = document.getElementById("launcher"),
       started  = false;
 
-  // Nothing loads until the visitor asks for it: no chatter is created and the
-  // conversation-start playbook does not run until openChat() calls start().
+  // A visitor who has been here before skips the bubble entirely.
+  var returning = false;
+  try {
+    returning = localStorage.getItem("jf_seen") === "1";
+    localStorage.setItem("jf_seen", "1");
+  } catch (e) {}   // private mode / blocked storage: treat as first visit
+
+  // Nothing loads until we ask for it: no chatter is created and the
+  // conversation-start playbook does not run until start() is called.
   window.adaSettings = { lazy: true };
 
-  function openChat(viaNudge) {
-    hideNudge();
+  /* ---------------- idle ---------------- */
 
-    if (started) {
-      if (viaNudge) window.adaEmbed.setMetaFields({ triggerNudge: true });
-      window.adaEmbed.toggle();
-      return;
-    }
-
-    started = true;
-    // start() is what creates the conversation, so meta fields passed here are
-    // on the chatter before the conversation-start playbook runs. Setting them
-    // afterwards would be too late for the playbook to branch on.
-    window.adaEmbed.start({
-      handle: "journify-sandbox",
-      metaFields: { triggerNudge: !!viaNudge },
-      adaReadyCallback: function () { window.adaEmbed.toggle(); },
-      toggleCallback: function (isOpen) { launcher.classList.toggle("open", isOpen); }
-    });
-  }
-
-  function hideNudge() {
-    nudge.classList.remove("show");
-    launcher.classList.remove("nudging");
-  }
-
-  // Fire after IDLE_MS of no interaction. Any activity restarts the clock and a
-  // hidden tab accrues no idle time, so this is "stopped and unsure" rather
-  // than "has been here a while".
   (function armIdleTimer() {
     var timer, fired = false;
 
     function fire() {
       if (fired || started) return;
       fired = true;
-      nudge.classList.add("show");
-      launcher.classList.add("nudging");
+      returning ? askOnBehalf() : showNudge();
     }
 
     function reset() {
@@ -233,6 +213,96 @@
     reset();
   })();
 
+  function showNudge() {
+    nudge.classList.add("show");
+    launcher.classList.add("nudging");
+  }
+  function hideNudge() {
+    nudge.classList.remove("show");
+    launcher.classList.remove("nudging");
+  }
+
+  /* ---------------- chat ---------------- */
+
+  function boot(extraMeta, onReady) {
+    started = true;
+    // start() creates the conversation, so meta fields passed here are on the
+    // chatter before the conversation-start playbook runs.
+    window.adaEmbed.start({
+      handle: "journify-sandbox",
+      enableProgrammaticControl: true,
+      metaFields: extraMeta,
+      adaReadyCallback: onReady,
+      toggleCallback: function (isOpen) { launcher.classList.toggle("open", isOpen); }
+    });
+  }
+
+  // First-time visitor accepted the bubble, or clicked the launcher.
+  function openChat(viaNudge) {
+    hideNudge();
+    if (started) {
+      if (viaNudge) window.adaEmbed.setMetaFields({ triggerNudge: true });
+      return window.adaEmbed.toggle();
+    }
+    boot({ triggerNudge: !!viaNudge, returning: false }, function () {
+      window.adaEmbed.toggle();
+    });
+  }
+
+  // Returning visitor: open the chat and put the question to the bot for them,
+  // so they land on an answer rather than a greeting.
+  function askOnBehalf() {
+    hideNudge();
+    boot({ triggerNudge: true, returning: true }, function () {
+      // Not chained on toggle()'s promise — the retry loop below is what waits
+      // for the chat frame, and chaining here can strand the message.
+      window.adaEmbed.toggle();
+      send();
+    });
+  }
+
+  // The chat frame goes live a few seconds after the drawer opens. Calling
+  // sendMessage before then either rejects with "Chat is not ready yet" or —
+  // worse — hangs without ever settling. So poll a read-only call until the
+  // frame answers, then send exactly once.
+  //
+  // The `sent` latch matters: the readiness probe can hang, so a watchdog
+  // starts a fresh poll, and without the latch each surviving chain sends its
+  // own copy of the question.
+  function send() {
+    var tries = 0, sent = false;
+
+    function sendOnce() {
+      if (sent) return;
+      sent = true;
+      window.adaEmbed.sendMessage(PROMPT).catch(function (err) {
+        console.warn("[journify] could not send the opening question:", err);
+      });
+    }
+
+    (function poll() {
+      if (sent) return;
+      if (++tries > 60) return console.warn("[journify] chat never became ready");
+
+      var moved = false;                       // has this attempt been settled?
+      var watchdog = setTimeout(function () {  // the probe itself can hang
+        if (!moved) { moved = true; poll(); }
+      }, 2000);
+
+      window.adaEmbed.getMessages().then(function () {
+        if (moved) return;                     // superseded by the watchdog
+        moved = true; clearTimeout(watchdog);
+        sendOnce();
+      }).catch(function () {
+        if (moved) return;
+        moved = true; clearTimeout(watchdog);
+        setTimeout(poll, 1000);
+      });
+    })();
+  }
+
+  /* ---------------- wiring ---------------- */
+
   nudge.onclick = function (e) {
     if (e.target.closest("#nudgeClose")) return;
     openChat(true);
@@ -242,8 +312,7 @@
     hideNudge();
   };
   launcher.onclick = function () {
-    if (!started) return openChat(false);
-    window.adaEmbed.toggle();
+    started ? window.adaEmbed.toggle() : openChat(false);
   };
 </script>
 <script async src="https://static.ada.support/embed2.js"></script>
