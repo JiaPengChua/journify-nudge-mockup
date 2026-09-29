@@ -15,6 +15,8 @@ Live: **https://jiapengchua.github.io/journify-nudge-mockup/** · Bot: `journify
 // playbook does not run until the visitor actually opens the chat.
 window.adaSettings = { lazy: true };
 
+// `nudged` is latched true the moment the bubble appears, so a visitor who
+// ignores the bubble and clicks the launcher still counts as nudge-driven.
 function openChat(viaNudge) {
   if (started) {
     if (viaNudge) window.adaEmbed.setMetaFields({ triggerNudge: true });
@@ -30,6 +32,9 @@ function openChat(viaNudge) {
     toggleCallback: function (isOpen) { launcher.classList.toggle("open", isOpen); }
   });
 }
+
+nudge.onclick    = function () { openChat(true); };
+launcher.onclick = function () { started ? adaEmbed.toggle() : openChat(nudged); };
 ```
 
 ## Custom window size without `parentElement`
@@ -78,6 +83,11 @@ a backgrounded tab accrues no idle time — so this fires on *"stopped, and prob
 rather than *"has been here 10 seconds"*. `IDLE_MS` is 10s so the demo is quick to show; a
 real page would use 45–90s.
 
+Once the bubble is up, **both** routes into the chat set `triggerNudge: true` — the bubble
+and the launcher. A visitor who ignores the bubble and clicks the widget was still
+interrupted by the page, so the attribution is the same. Dismissing the bubble with the ×
+does not clear the latch; the nudge still happened.
+
 It nudges **once per page load**. Once the bubble has shown, or the visitor has opened the
 chat by any route, the timer is finished for that visit.
 
@@ -92,7 +102,7 @@ A `localStorage` flag splits the two:
 | | first visit | returning visit |
 | --- | --- | --- |
 | On idle | bubble appears, visitor chooses | chat opens and asks the question for them |
-| Meta fields | `triggerNudge` by route, `returning: false` | `triggerNudge: true`, `returning: true` |
+| Meta fields | `triggerNudge: true` once the bubble has shown, by either route; `returning: false` | `triggerNudge: true`, `returning: true` |
 | Visitor sees | "Choose flypass?" bubble | the question already asked, bot answering |
 
 A returning visitor has been offered the bubble before, so they get the answer instead of the

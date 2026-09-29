@@ -177,7 +177,8 @@
 
   var nudge    = document.getElementById("nudge"),
       launcher = document.getElementById("launcher"),
-      started  = false;
+      started  = false,
+      nudged   = false;   // the bubble has been shown this visit
 
   // A visitor who has been here before skips the bubble entirely.
   var returning = false;
@@ -214,6 +215,7 @@
   })();
 
   function showNudge() {
+    nudged = true;
     nudge.classList.add("show");
     launcher.classList.add("nudging");
   }
@@ -237,7 +239,8 @@
     });
   }
 
-  // First-time visitor accepted the bubble, or clicked the launcher.
+  // Opened from the bubble, or from the launcher. Either counts as nudge-driven
+  // once the bubble has appeared: the page interrupted them either way.
   function openChat(viaNudge) {
     hideNudge();
     if (started) {
@@ -312,7 +315,7 @@
     hideNudge();
   };
   launcher.onclick = function () {
-    started ? window.adaEmbed.toggle() : openChat(false);
+    started ? window.adaEmbed.toggle() : openChat(nudged);
   };
 </script>
 <script async src="https://static.ada.support/embed2.js"></script>
